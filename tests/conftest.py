@@ -1,9 +1,26 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from fast_zero.app import app
+from fast_zero.models import table_registry
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     return TestClient(app)  # fase de organização do teste ARRANGE
+
+
+@pytest.fixture()
+def session():
+    engine = create_engine('sqlite:///:memory:')
+    table_registry.metadata.create_all(engine)
+
+    # gerenciamento de contexto
+    with Session(engine) as session:
+        # o yield delimita até onde roda a config antes de
+        # rodar o teste ver live de corotinas
+        yield session
+
+    table_registry.metadata.drop_all(engine)
