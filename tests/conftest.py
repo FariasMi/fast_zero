@@ -7,16 +7,15 @@ from sqlalchemy.pool import StaticPool
 from fast_zero.app import app
 from fast_zero.database import get_session
 from fast_zero.models import User, table_registry
+from fast_zero.security import get_password_hash
 
 
 @pytest.fixture()
-def client(session):  # fase de organização do teste ARRANGE
+def client(session):
     def get_session_override():
         return session
 
     with TestClient(app) as client:
-        # sobrescreve a função get_client pra trocar a
-        # engine produtiva pela de testes
         app.dependency_overrides[get_session] = get_session_override
         yield client
 
@@ -30,13 +29,9 @@ def session():
         connect_args={'check_same_thread': False},
         poolclass=StaticPool,
     )
-
     table_registry.metadata.create_all(engine)
 
-    # gerenciamento de contexto
     with Session(engine) as session:
-        # o yield delimita até onde roda a config antes de
-        # rodar o teste ver live de corotinas
         yield session
 
     table_registry.metadata.drop_all(engine)
@@ -44,10 +39,25 @@ def session():
 
 @pytest.fixture()
 def user(session):
-    user = User(username='Teste', email='teste@test.com', password='testtest')
-
+    user = User(
+        username='Teste',
+        email='teste@test.com',
+        password=get_password_hash('testtest'),
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
 
+    user.clean_password = 'testtest'
+
     return user
+
+
+@pytest.fixture()
+def token(client, user):
+    response = client.post(
+        '/auth/token',
+        data={'username': user.email, 'password': user.clean_password},
+    )
+
+    return response.json()['access_token']
